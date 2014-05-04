@@ -30,9 +30,10 @@ mask_bit=`echo "obase=2;${_mask}"|bc|awk -F'0' '{print length($1)}'`
 
 
 # Install Shadowsocks
-function install_postfix_extmail(){
+function install_mta(){
     rootness
     disable_selinux
+    # pre_install
     download_package
     mount_iso
     local_yum
@@ -64,6 +65,30 @@ if [ -s /etc/selinux/config ] && grep 'SELINUX=enforcing' /etc/selinux/config; t
     sed -i 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/selinux/config
     setenforce 0
 fi
+}
+
+# Pre-installation settings
+function pre_install(){
+    #Set shadowsocks config password
+    echo "Please input password for shadowsocks:"
+    read -p "(Default password: teddysun.com):" shadowsockspwd
+    if [ "$shadowsockspwd" = "" ]; then
+        shadowsockspwd="teddysun.com"
+    fi
+    echo "password:$shadowsockspwd"
+    echo "####################################"
+    get_char(){
+        SAVEDSTTY=`stty -g`
+        stty -echo
+        stty cbreak
+        dd if=/dev/tty bs=1 count=1 2> /dev/null
+        stty -raw
+        stty echo
+        stty $SAVEDSTTY
+    }
+    echo ""
+    echo "Press any key to start...or Press Ctrl+C to cancel"
+    char=`get_char`
 }
 
 # Download files
@@ -370,21 +395,29 @@ function stat_update(){
     /usr/local/mailgraph_ext/mailgraph-init restart
     service courier-imap restart
     service iptables stop
-    mv /etc/yum/repos.d/backup/*.repo /etc/yum/repos.d/
+    mv /etc/yum.repos.d/backup/*.repo /etc/yum.repos.d/
+}
+
+function update_mta(){
+    if [ -s /etc/postfix/main.cf ]; then
+        sed -ir "s/mynetworks = .*/mynetworks = 127.0.0.1, ${net_num}\/${mask_bit}/g" /etc/postfix/main.cf
+    else
+        echo "main.cf not found"
+    fi
+    service postfix restart
 }
 # Initialization step
-# action=$1
+action=$1
 # [  -z $1 ] && action=install
-# case "$action" in
-# install)
-#     install_shadowsocks
-#     ;;
-# uninstall)
-#     uninstall_shadowsocks
-#     ;;
-# *)
-#     echo "Arguments error! [${action} ]"
-#     echo "Usage: `basename $0` {install|uninstall}"
-#     ;;
-# esac
-install_postfix_extmail
+case "$action" in
+install)
+    install_mta
+    ;;
+update)
+    update_mta
+    ;;
+*)
+    echo "Arguments error! [${action} ]"
+    echo "Usage: `basename $0` {install|update}"
+    ;;
+esac
